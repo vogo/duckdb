@@ -18,6 +18,7 @@
 package duckdb
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -353,7 +354,7 @@ func (m Migrator) MigrateColumn(value interface{}, field *schema.Field, columnTy
 	}
 
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		var description string
+		var description sql.NullString
 		currentSchema, curTable := m.CurrentSchema(stmt, stmt.Table)
 		values := []interface{}{currentSchema, curTable, field.DBName, stmt.Table, currentSchema}
 		checkSQL := "SELECT description FROM pg_catalog.pg_description "
@@ -366,7 +367,7 @@ func (m Migrator) MigrateColumn(value interface{}, field *schema.Field, columnTy
 
 		comment := strings.Trim(field.Comment, "'")
 		comment = strings.Trim(comment, `"`)
-		if field.Comment != "" && comment != description {
+		if field.Comment != "" && comment != description.String {
 			if err := m.DB.Exec(
 				"COMMENT ON COLUMN ?.? IS ?",
 				m.CurrentTable(stmt), clause.Column{Name: field.DBName}, gorm.Expr(func() string {
