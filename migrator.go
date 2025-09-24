@@ -18,6 +18,7 @@
 package duckdb
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -353,12 +354,12 @@ func (m Migrator) MigrateColumn(value interface{}, field *schema.Field, columnTy
 	}
 
 	return m.RunWithValue(value, func(stmt *gorm.Statement) error {
-		var description string
+		var description sql.NullString
 		currentSchema, curTable := m.CurrentSchema(stmt, stmt.Table)
 		values := []interface{}{currentSchema, curTable, field.DBName, stmt.Table, currentSchema}
 		checkSQL := "SELECT description FROM pg_catalog.pg_description "
-		checkSQL += "WHERE objsubid = (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?) "
-		checkSQL += "AND objoid = (SELECT oid FROM pg_catalog.pg_class WHERE relname = ? AND relnamespace = "
+		checkSQL += "WHERE objsubid IN (SELECT ordinal_position FROM information_schema.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?) "
+		checkSQL += "AND objoid IN (SELECT oid FROM pg_catalog.pg_class WHERE relname = ? AND relnamespace IN "
 		checkSQL += "(SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = ?))"
 		if err := m.DB.Raw(checkSQL, values...).Row().Scan(&description); err != nil {
 			return err
@@ -366,7 +367,7 @@ func (m Migrator) MigrateColumn(value interface{}, field *schema.Field, columnTy
 
 		comment := strings.Trim(field.Comment, "'")
 		comment = strings.Trim(comment, `"`)
-		if field.Comment != "" && comment != description {
+		if field.Comment != "" && comment != description.String {
 			if err := m.DB.Exec(
 				"COMMENT ON COLUMN ?.? IS ?",
 				m.CurrentTable(stmt), clause.Column{Name: field.DBName}, gorm.Expr(func() string {
